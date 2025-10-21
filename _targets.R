@@ -47,119 +47,147 @@ tar_option_set(
 # Run the R scripts in the R/ folder with your custom functions:
 tar_source()
 # tar_source("other_functions.R") # Source other scripts as needed.
-
-# Define the pipeline
+# Define pipeline
 list(
-  # Input path
+  
+  # ---- 1. Input path ----
   tar_target(
-    path, 
-    "MiSeq_SOP", 
+    dada_path,
+    "MiSeq_SOP",
     format = "file"
   ),
   
-  # Load FASTQ files
+  # ---- 2. Load FASTQ files ----
   tar_target(
-    fastq_files,
-    load_fastq_files(path)
+    dada_fastq_files,
+    load_fastq_files(dada_path)
   ),
   
-  # Filter and trim
+  # ---- 3. Filter and trim ----
   tar_target(
-    filt,
-    filter_and_trim(fastq_files$fnFs, fastq_files$fnRs, fastq_files$sample.names, path)
+    dada_filt,
+    filter_and_trim(
+      dada_fastq_files$fnFs,
+      dada_fastq_files$fnRs,
+      dada_fastq_files$sample.names,
+      dada_path
+    )
   ),
   
-  # Learn errors
+  # ---- 4. Learn error rates ----
   tar_target(
-    errs,
-    learn_error_rates(filt$filtFs, filt$filtRs)
+    dada_errs,
+    learn_error_rates(dada_filt$filtFs, dada_filt$filtRs)
   ),
   
-  # Denoise
+  # ---- 5. Denoise ----
   tar_target(
-    inf,
-    infer_samples(filt$filtFs, filt$filtRs, errs$errF, errs$errR)
+    dada_inf,
+    infer_samples(
+      dada_filt$filtFs,
+      dada_filt$filtRs,
+      dada_errs$errF,
+      dada_errs$errR
+    )
   ),
   
-  # Merge
+  # ---- 6. Merge paired reads ----
   tar_target(
-    mergers,
-    merge_pairs(inf$dadaFs, filt$filtFs, inf$dadaRs, filt$filtRs)
+    dada_mergers,
+    merge_pairs(
+      dada_inf$dadaFs,
+      dada_filt$filtFs,
+      dada_inf$dadaRs,
+      dada_filt$filtRs
+    )
   ),
   
-  # Sequence table and chimera removal (split!)
+  # ---- 7. Sequence table & chimera removal ----
   tar_target(
-    seqtab,
-    make_sequence_table(mergers)$seqtab
+    dada_seqtab,
+    make_sequence_table(dada_mergers)$seqtab
   ),
   
   tar_target(
-    seqtab_nochim,
-    make_sequence_table(mergers)$seqtab.nochim
+    dada_seqtab_nochim,
+    make_sequence_table(dada_mergers)$seqtab.nochim
   ),
   
-  # Tracking reads
+  # ---- 8. Track reads ----
   tar_target(
-    track,
-    track_reads(filt$out, inf$dadaFs, inf$dadaRs, mergers, seqtab_nochim, fastq_files$sample.names)
+    dada_track,
+    track_reads(
+      dada_filt$out,
+      dada_inf$dadaFs,
+      dada_inf$dadaRs,
+      dada_mergers,
+      dada_seqtab_nochim,
+      dada_fastq_files$sample.names
+    )
   ),
   
-  # Assign taxonomy
+  # ---- 9. Assign taxonomy ----
   tar_target(
-    taxa,
-    assign_taxonomy(seqtab_nochim, file.path(path, "silva_nr_v132_train_set.fa.gz"))
+    dada_taxa,
+    assign_taxonomy(
+      dada_seqtab_nochim,
+      file.path(dada_path, "silva_nr_v132_train_set.fa.gz")
+    )
   ),
   
-  # Evaluate accuracy (optional)
+  # ---- 10. Evaluate accuracy ----
   tar_target(
-    evaluation,
-    evaluate_accuracy(seqtab_nochim, path)
+    dada_eval,
+    evaluate_accuracy(dada_seqtab_nochim, dada_path)
   ),
   
-  # Sample metadata
+  # ---- 11. Sample metadata ----
   tar_target(
     dada_samdf,
-    make_sample_metadata(seqtab_nochim)
+    make_sample_metadata(dada_seqtab_nochim)
   ),
   
-  # Build and prepare phyloseq object
+  # ---- 12. Build & prepare phyloseq object ----
   tar_target(
     dada_ps,
     {
-      ps <- make_phyloseq_object(seqtab_nochim, taxa, dada_samdf)
+      ps <- make_phyloseq_object(dada_seqtab_nochim, dada_taxa, dada_samdf)
       prep_phyloseq(ps)
     }
   ),
   
-  # Alpha diversity plot
+  # ---- 13. Alpha diversity plot ----
   tar_target(
-    plot_alpha_file,
+    dada_plot_alpha,
     {
       p <- plot_alpha_diversity(dada_ps)
+      dir.create("results", showWarnings = FALSE)
       ggsave("results/alpha_diversity.png", p, width = 6, height = 4)
       "results/alpha_diversity.png"
     },
     format = "file"
   ),
   
-  # NMDS ordination plot
+  # ---- 14. NMDS ordination plot ----
   tar_target(
-    plot_ord,
+    dada_plot_ord,
     {
       p <- plot_ordination_nmds(dada_ps)
+      dir.create("results", showWarnings = FALSE)
       ggsave("results/ordination_nmds.png", p, width = 6, height = 4)
       "results/ordination_nmds.png"
     },
     format = "file"
   ),
   
-  # Top 20 taxa barplot
+  # ---- 15. Top 20 taxa barplot ----
   tar_target(
-    plot_bar,
+    dada_plot_bar,
     {
       p <- plot_top20_taxa(dada_ps)
-      ggsave("results/Bar_top20_taxa.png", p, width = 6, height = 4)
-      "results/Bar_top20_taxa.png"
+      dir.create("results", showWarnings = FALSE)
+      ggsave("results/bar_top20_taxa.png", p, width = 6, height = 4)
+      "results/bar_top20_taxa.png"
     },
     format = "file"
   )
